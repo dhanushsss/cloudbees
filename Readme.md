@@ -48,5 +48,14 @@ The `BookingControllerTest` class uses `MockMvc` to mock HTTP requests and respo
 ### Service Unit Tests
 The `BookingServiceImplTest` class uses Mockito to mock dependencies like `UserRepository` and `TicketRepository`. It tests the business logic by simulating various scenarios, such as successful operations and exception cases.
 
+## Entity Relationships
+The application uses the following entity relationships to model the data structure:
+
+### User - Ticket Relationship:
+#### A User can have multiple Ticket entries.
+#### This is implemented using @OneToMany on the User entity and @ManyToOne on the Ticket entity.
+
 
 ## The following drive link contains screenshots of the API responses
+
+[Click here to view the screenshots](https://drive.google.com/drive/folders/18Hq1NbtKnEPFq-v1kNjlbrxcXNCv5lOW?usp=sharing)
