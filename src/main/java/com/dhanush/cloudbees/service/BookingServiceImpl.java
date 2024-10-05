@@ -5,78 +5,97 @@ import com.dhanush.cloudbees.exception.UserNotFoundException;
 import com.dhanush.cloudbees.model.Ticket;
 import com.dhanush.cloudbees.model.User;
 import com.dhanush.cloudbees.model.dto.TicketDTO;
-import com.dhanush.cloudbees.repository.TicketRepository;
-import com.dhanush.cloudbees.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class BookingServiceImpl implements BookingService {
-
-    @Autowired
-    private TicketRepository ticketRepository;
-
-    @Autowired
-    private UserRepository userRepository;
+    private final Map<UUID, User> users = new HashMap<>();
+    private final Map<UUID, Ticket> tickets = new HashMap<>();
+    private final Map<String, UUID> emailToUserIdMap = new HashMap<>();
 
     @Override
     public TicketDTO purchaseTicket(Ticket ticket) {
-        User user = userRepository.findByEmail(ticket.getUser().getEmail())
-                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + ticket.getUser().getEmail()));
-        ticket.setUser(user);
+
+        UUID userId = emailToUserIdMap.get(ticket.getUser().getEmail());
+        if (userId == null) {
+            throw new UserNotFoundException("User not found with email: " + ticket.getUser().getEmail());
+        }
+
+        ticket.setUser(users.get(userId));
         ticket.setSeatNumber(assignSeat(ticket.getSection()));
-        Ticket savedTicket = ticketRepository.save(ticket);
-        return convertToDTO(savedTicket);
+        ticket.setId(UUID.randomUUID());
+        tickets.put(ticket.getId(), ticket);
+        return convertToDTO(ticket);
     }
 
     @Override
     public Ticket getTicketDetails(String email) {
-        List<Ticket> tickets = ticketRepository.findAllByUserEmail(email);
-        if (tickets.isEmpty()) {
+        List<Ticket> userTickets = tickets.values().stream()
+                .filter(ticket -> ticket.getUser().getEmail().equals(email))
+                .collect(Collectors.toList());
+
+        if (userTickets.isEmpty()) {
             throw new TicketNotFoundException("Ticket not found for email: " + email);
         }
-        return tickets.get(0);
+        return userTickets.get(0);
     }
 
     @Override
     public List<Ticket> getAllUsersBySection(String section) {
-        List<Ticket> tickets = ticketRepository.findBySection(section);
-        if (tickets.isEmpty()) {
+        List<Ticket> sectionTickets = tickets.values().stream()
+                .filter(ticket -> ticket.getSection().equalsIgnoreCase(section))
+                .collect(Collectors.toList());
+
+        if (sectionTickets.isEmpty()) {
             throw new TicketNotFoundException("No tickets found for section: " + section);
         }
-        return tickets;
+        return sectionTickets;
     }
 
     @Override
     public List<Ticket> getAllTicketsByUser(String email) {
-        List<Ticket> tickets = ticketRepository.findAllByUserEmail(email);
-        if (tickets.isEmpty()) {
+        List<Ticket> userTickets = tickets.values().stream()
+                .filter(ticket -> ticket.getUser().getEmail().equals(email))
+                .collect(Collectors.toList());
+
+        if (userTickets.isEmpty()) {
             throw new TicketNotFoundException("No tickets found for user email: " + email);
         }
-        return tickets;
+        return userTickets;
     }
 
     @Override
     public Ticket modifySeat(String email, String newSeat) {
-        List<Ticket> tickets = ticketRepository.findAllByUserEmail(email);
-        if (tickets.isEmpty()) {
+        List<Ticket> userTickets = tickets.values().stream()
+                .filter(ticket -> ticket.getUser().getEmail().equals(email))
+                .collect(Collectors.toList());
+
+        if (userTickets.isEmpty()) {
             throw new TicketNotFoundException("Ticket not found for email: " + email);
         }
-        Ticket ticket = tickets.get(0);
+
+        Ticket ticket = userTickets.get(0);
         ticket.setSeatNumber(newSeat);
-        return ticketRepository.save(ticket);
+        tickets.put(ticket.getId(), ticket);
+        return ticket;
     }
 
     @Override
     public boolean removeUserFromTrain(String email) {
-        List<Ticket> tickets = ticketRepository.findAllByUserEmail(email);
-        if (tickets.isEmpty()) {
+        List<UUID> ticketIdsToRemove = tickets.values().stream()
+                .filter(ticket -> ticket.getUser().getEmail().equals(email))
+                .map(Ticket::getId)
+                .collect(Collectors.toList());
+
+        if (ticketIdsToRemove.isEmpty()) {
             throw new UserNotFoundException("User not found with email: " + email);
         }
-        ticketRepository.deleteAll(tickets);
+        for (UUID ticketId : ticketIdsToRemove) {
+            tickets.remove(ticketId);
+        }
         return true;
     }
 
@@ -85,20 +104,22 @@ public class BookingServiceImpl implements BookingService {
         if (user.getId() == null) {
             user.setId(UUID.randomUUID());
         }
-        return userRepository.save(user);
+        users.put(user.getId(), user);
+        emailToUserIdMap.put(user.getEmail(), user.getId());
+        return user;
     }
 
     @Override
     public Optional<User> getUserByEmail(String email) {
-        return userRepository.findByEmail(email);
+        UUID userId = emailToUserIdMap.get(email);
+        return Optional.ofNullable(users.get(userId));
     }
 
     private String assignSeat(String section) {
         return section.equalsIgnoreCase("A") ? "A1" : "B1";
     }
 
-
-    public TicketDTO convertToDTO(Ticket ticket) {
+    private TicketDTO convertToDTO(Ticket ticket) {
         TicketDTO dto = new TicketDTO();
         dto.setId(ticket.getId());
         dto.setFromStation(ticket.getFromStation());
@@ -109,5 +130,4 @@ public class BookingServiceImpl implements BookingService {
         dto.setSeatNumber(ticket.getSeatNumber());
         return dto;
     }
-
 }

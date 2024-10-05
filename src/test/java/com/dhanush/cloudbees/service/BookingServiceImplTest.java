@@ -5,25 +5,18 @@ import com.dhanush.cloudbees.exception.UserNotFoundException;
 import com.dhanush.cloudbees.model.Ticket;
 import com.dhanush.cloudbees.model.User;
 import com.dhanush.cloudbees.model.dto.TicketDTO;
-import com.dhanush.cloudbees.repository.TicketRepository;
-import com.dhanush.cloudbees.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+
 
 class BookingServiceImplTest {
 
-    @Mock
-    private TicketRepository ticketRepository;
-    @Mock
-    private UserRepository userRepository;
     @InjectMocks
     private BookingServiceImpl bookingService;
 
@@ -35,8 +28,8 @@ class BookingServiceImplTest {
         MockitoAnnotations.openMocks(this);
         testUser = new User();
         testUser.setId(UUID.randomUUID());
-        testUser.setEmail("dhanu@gmail.com");
-        testUser.setName("Dhanush");
+        testUser.setName("John Doe");
+        testUser.setEmail("john.doe@example.com");
         testTicket = new Ticket();
         testTicket.setId(UUID.randomUUID());
         testTicket.setFromStation("Boston");
@@ -45,77 +38,125 @@ class BookingServiceImplTest {
         testTicket.setSection("A");
         testTicket.setSeatNumber("A1");
         testTicket.setUser(testUser);
+        bookingService.addUser(testUser);
+    }
+
+    @Test
+    void testAddUser_Success() {
+        User newUser = new User();
+        newUser.setName("Jane Doe");
+        newUser.setEmail("jane.doe@example.com");
+        User addedUser = bookingService.addUser(newUser);
+        assertNotNull(addedUser.getId());
+        assertEquals("Jane Doe", addedUser.getName());
+        assertEquals("jane.doe@example.com", addedUser.getEmail());
+    }
+
+    @Test
+    void testGetUserByEmail_Success() {
+        Optional<User> user = bookingService.getUserByEmail("john.doe@example.com");
+        assertTrue(user.isPresent());
+        assertEquals("john.doe@example.com", user.get().getEmail());
+    }
+
+    @Test
+    void testGetUserByEmail_NotFound() {
+        Optional<User> user = bookingService.getUserByEmail("non.existent@example.com");
+        assertFalse(user.isPresent());
     }
 
     @Test
     void testPurchaseTicket_Success() {
-        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
-        when(ticketRepository.save(any(Ticket.class))).thenReturn(testTicket);
-        TicketDTO purchasedTicket = bookingService.purchaseTicket(testTicket);
-        assertNotNull(purchasedTicket);
-        assertEquals(testTicket.getId(), purchasedTicket.getId());
-        assertEquals(testTicket.getFromStation(), purchasedTicket.getFromStation());
-        assertEquals(testTicket.getUser().getEmail(), purchasedTicket.getUserEmail());
-        verify(ticketRepository, times(1)).save(testTicket);
+        Ticket ticket = new Ticket();
+        ticket.setFromStation("Los Angeles");
+        ticket.setToStation("San Francisco");
+        ticket.setPricePaid(200.0);
+        ticket.setSection("B");
+        ticket.setUser(testUser);
+        TicketDTO purchasedTicket = bookingService.purchaseTicket(ticket);
+        assertNotNull(purchasedTicket.getId());
+        assertEquals("Los Angeles", purchasedTicket.getFromStation());
+        assertEquals("San Francisco", purchasedTicket.getToStation());
+        assertEquals("john.doe@example.com", purchasedTicket.getUserEmail());
     }
 
     @Test
     void testPurchaseTicket_UserNotFound() {
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
-        assertThrows(UserNotFoundException.class, () -> bookingService.purchaseTicket(testTicket));
+        Ticket ticket = new Ticket();
+        ticket.setFromStation("Chicago");
+        ticket.setToStation("Houston");
+        ticket.setPricePaid(300.0);
+        ticket.setSection("C");
+        User nonExistentUser = new User();
+        nonExistentUser.setEmail("non.existent@example.com");
+        ticket.setUser(nonExistentUser);
+        assertThrows(UserNotFoundException.class, () -> bookingService.purchaseTicket(ticket));
     }
 
     @Test
     void testGetTicketDetails_Success() {
-        when(ticketRepository.findAllByUserEmail(testUser.getEmail())).thenReturn(Collections.singletonList(testTicket));
-        Ticket ticketDetails = bookingService.getTicketDetails(testUser.getEmail());
+
+        bookingService.purchaseTicket(testTicket);
+        Ticket ticketDetails = bookingService.getTicketDetails("john.doe@example.com");
         assertNotNull(ticketDetails);
-        assertEquals(testTicket.getId(), ticketDetails.getId());
-        verify(ticketRepository, times(1)).findAllByUserEmail(testUser.getEmail());
+        assertEquals("Boston", ticketDetails.getFromStation());
+        assertEquals("New York", ticketDetails.getToStation());
     }
 
     @Test
     void testGetTicketDetails_TicketNotFound() {
-        when(ticketRepository.findAllByUserEmail(anyString())).thenReturn(Collections.emptyList());
-        assertThrows(TicketNotFoundException.class, () -> bookingService.getTicketDetails(testUser.getEmail()));
+        assertThrows(TicketNotFoundException.class, () -> bookingService.getTicketDetails("no.ticket@example.com"));
     }
 
     @Test
     void testGetAllUsersBySection_Success() {
-        when(ticketRepository.findBySection("A")).thenReturn(Collections.singletonList(testTicket));
-        var tickets = bookingService.getAllUsersBySection("A");
+        bookingService.purchaseTicket(testTicket);
+        List<Ticket> tickets = bookingService.getAllUsersBySection("A");
+        assertNotNull(tickets);
         assertEquals(1, tickets.size());
-        assertEquals(testTicket.getSection(), tickets.get(0).getSection());
+        assertEquals("A", tickets.get(0).getSection());
+    }
+
+    @Test
+    void testGetAllUsersBySection_TicketNotFound() {
+        assertThrows(TicketNotFoundException.class, () -> bookingService.getAllUsersBySection("Z"));
     }
 
     @Test
     void testGetAllTicketsByUser_Success() {
-        when(ticketRepository.findAllByUserEmail(testUser.getEmail())).thenReturn(Collections.singletonList(testTicket));
-        var tickets = bookingService.getAllTicketsByUser(testUser.getEmail());
+        bookingService.purchaseTicket(testTicket);
+        List<Ticket> tickets = bookingService.getAllTicketsByUser("john.doe@example.com");
+        assertNotNull(tickets);
         assertEquals(1, tickets.size());
-        assertEquals(testTicket.getUser().getEmail(), tickets.get(0).getUser().getEmail());
+    }
+
+    @Test
+    void testGetAllTicketsByUser_TicketNotFound() {
+        assertThrows(TicketNotFoundException.class, () -> bookingService.getAllTicketsByUser("non.existent@example.com"));
     }
 
     @Test
     void testModifySeat_Success() {
-        when(ticketRepository.findAllByUserEmail(testUser.getEmail())).thenReturn(Collections.singletonList(testTicket));
-        when(ticketRepository.save(any(Ticket.class))).thenReturn(testTicket);
-        Ticket modifiedTicket = bookingService.modifySeat(testUser.getEmail(), "B2");
+        bookingService.purchaseTicket(testTicket);
+        Ticket modifiedTicket = bookingService.modifySeat("john.doe@example.com", "B2");
         assertNotNull(modifiedTicket);
         assertEquals("B2", modifiedTicket.getSeatNumber());
     }
 
     @Test
+    void testModifySeat_TicketNotFound() {
+        assertThrows(TicketNotFoundException.class, () -> bookingService.modifySeat("non.existent@example.com", "C3"));
+    }
+
+    @Test
     void testRemoveUserFromTrain_Success() {
-        when(ticketRepository.findAllByUserEmail(testUser.getEmail())).thenReturn(Collections.singletonList(testTicket));
-        boolean isRemoved = bookingService.removeUserFromTrain(testUser.getEmail());
+        bookingService.purchaseTicket(testTicket);
+        boolean isRemoved = bookingService.removeUserFromTrain("john.doe@example.com");
         assertTrue(isRemoved);
-        verify(ticketRepository, times(1)).deleteAll(anyList());
     }
 
     @Test
     void testRemoveUserFromTrain_UserNotFound() {
-        when(ticketRepository.findAllByUserEmail(anyString())).thenReturn(Collections.emptyList());
-        assertThrows(UserNotFoundException.class, () -> bookingService.removeUserFromTrain(testUser.getEmail()));
+        assertThrows(UserNotFoundException.class, () -> bookingService.removeUserFromTrain("non.existent@example.com"));
     }
 }

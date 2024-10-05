@@ -6,6 +6,7 @@ import com.dhanush.cloudbees.model.dto.TicketDTO;
 import com.dhanush.cloudbees.service.BookingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -16,9 +17,9 @@ import java.util.Optional;
 import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(BookingController.class)
 class BookingControllerTest {
@@ -35,10 +36,11 @@ class BookingControllerTest {
 
     @BeforeEach
     void setUp() {
+        MockitoAnnotations.openMocks(this);
         testUser = new User();
         testUser.setId(UUID.randomUUID());
-        testUser.setName("Dhanush");
-        testUser.setEmail("dhanu@gmail.com");
+        testUser.setName("John Doe");
+        testUser.setEmail("john.doe@example.com");
         testTicket = new Ticket();
         testTicket.setId(UUID.randomUUID());
         testTicket.setFromStation("Boston");
@@ -62,21 +64,21 @@ class BookingControllerTest {
         when(bookingService.getUserByEmail(testUser.getEmail())).thenReturn(Optional.empty());
         when(bookingService.addUser(any(User.class))).thenReturn(testUser);
 
-        mockMvc.perform(post("/api/v1/tickets/add")
+        mockMvc.perform(post("/api/tickets/add")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"name\": \"Dhanush\", \"email\": \"dhanu@gmail.com\" }"))
+                        .content("{ \"name\": \"John Doe\", \"email\": \"john.doe@example.com\" }"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value("dhanu@gmail.com"))
-                .andExpect(jsonPath("$.name").value("Dhanush"));
+                .andExpect(jsonPath("$.name").value("John Doe"))
+                .andExpect(jsonPath("$.email").value("john.doe@example.com"));
     }
 
     @Test
     void testAddUser_Conflict() throws Exception {
-        when(bookingService.getUserByEmail(anyString())).thenReturn(Optional.of(testUser));
+        when(bookingService.getUserByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
 
-        mockMvc.perform(post("/api/v1/tickets/add")
+        mockMvc.perform(post("/api/tickets/add")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"name\": \"Dhanush\", \"email\": \"dhanu@gmail.com\" }"))
+                        .content("{ \"name\": \"John Doe\", \"email\": \"john.doe@example.com\" }"))
                 .andExpect(status().isConflict());
     }
 
@@ -84,32 +86,29 @@ class BookingControllerTest {
     void testPurchaseTicket_Success() throws Exception {
         when(bookingService.purchaseTicket(any(Ticket.class))).thenReturn(testTicketDTO);
 
-        mockMvc.perform(post("/api/v1/tickets/purchase")
+        mockMvc.perform(post("/api/tickets/purchase")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"fromStation\": \"Boston\", \"toStation\": \"New York\", \"pricePaid\": 150.0, \"section\": \"A\", \"user\": { \"email\": \"dhanu@gmail.com\" }}"))
+                        .content("{ \"fromStation\": \"Boston\", \"toStation\": \"New York\", \"pricePaid\": 150.0, \"section\": \"A\", \"user\": { \"email\": \"john.doe@example.com\" }}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fromStation").value("Boston"))
                 .andExpect(jsonPath("$.toStation").value("New York"))
-                .andExpect(jsonPath("$.userEmail").value("dhanu@gmail.com"));
+                .andExpect(jsonPath("$.userEmail").value("john.doe@example.com"));
     }
 
     @Test
     void testGetTicketDetails_Success() throws Exception {
         when(bookingService.getTicketDetails(anyString())).thenReturn(testTicket);
-
-        mockMvc.perform(get("/api/v1/tickets/dhanu@gmail.com")
+        mockMvc.perform(get("/api/tickets/john.doe@example.com")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fromStation").value("Boston"))
-                .andExpect(jsonPath("$.toStation").value("New York"))
-                .andExpect(jsonPath("$.pricePaid").value(150.0));
+                .andExpect(jsonPath("$.toStation").value("New York"));
     }
 
     @Test
     void testGetUsersBySection_Success() throws Exception {
         when(bookingService.getAllUsersBySection(anyString())).thenReturn(Collections.singletonList(testTicket));
-
-        mockMvc.perform(get("/api/v1/tickets/section/A")
+        mockMvc.perform(get("/api/tickets/section/A")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].section").value("A"));
@@ -119,25 +118,26 @@ class BookingControllerTest {
     void testGetAllTicketsByUser_Success() throws Exception {
         when(bookingService.getAllTicketsByUser(anyString())).thenReturn(Collections.singletonList(testTicket));
 
-        mockMvc.perform(get("/api/v1/tickets/user/john.doe@example.com")
+        mockMvc.perform(get("/api/tickets/user/john.doe@example.com")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].user.email").value("dhanu@gmail.com"));
+                .andExpect(jsonPath("$[0].user.email").value("john.doe@example.com"));
     }
+
 
     @Test
     void testRemoveUserFromTrain_Success() throws Exception {
         when(bookingService.removeUserFromTrain(anyString())).thenReturn(true);
-        mockMvc.perform(delete("/api/v1/tickets/remove/dhanu@gmail.com")
+        mockMvc.perform(delete("/api/tickets/remove/john.doe@example.com")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().string("User removed successfully."));
     }
 
     @Test
-    void testRemoveUserFromTrain_NotFound() throws Exception {
+    void testRemoveUserFromTrain_UserNotFound() throws Exception {
         when(bookingService.removeUserFromTrain(anyString())).thenReturn(false);
-        mockMvc.perform(delete("/api/v1/tickets/remove/dhanu@gmail.com")
+        mockMvc.perform(delete("/api/tickets/remove/john.doe@example.com")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().string("User not found."));
